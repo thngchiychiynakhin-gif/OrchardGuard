@@ -4,6 +4,7 @@ import { StyleSheet, useColorScheme, View } from "react-native";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { BottomNav } from "@/components/bottom-nav";
+import { LanguageProvider } from "@/hooks/language";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -11,17 +12,19 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      {/* Splash Screen */}
-      <AnimatedSplashOverlay />
+    <LanguageProvider>
+      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+        {/* Splash Screen */}
+        <AnimatedSplashOverlay />
 
-      <View style={styles.root}>
-        <Slot />
-        <View style={styles.navArea}>
-          <BottomNav />
+        <View style={styles.root}>
+          <Slot />
+          <View style={styles.navArea}>
+            <BottomNav />
+          </View>
         </View>
-      </View>
-    </ThemeProvider>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }
 

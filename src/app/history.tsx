@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "@/constants/api";
+import { useLanguage, type Language } from "@/hooks/language";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useEffect, useState } from "react";
 import {
@@ -13,54 +15,26 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Line, Path, Text as SvgText } from "react-native-svg";
 
-const API_URL = "http://localhost/orchardguard/get_data.php";
+const API_URL = `${API_BASE_URL}/get_data.php`;
+const REFRESH_INTERVAL_MS = 5000;
 
 type ApiRow = {
   temperature?: number | string;
   humidity?: number | string;
   soil?: number | string;
+  rain?: number | string;
+  "WH-SP-RG"?: number | string;
   risk_score?: number | string;
   risk_level?: string;
   created_at?: string;
 };
 
-type Reading = {
-  date: string;
-  risk: string;
-  temperature: string;
-  humidity: string;
-  soil: string;
-  trend: number[];
-};
-
-const defaultReading: Reading = {
-  date: "",
-  risk: "ความเสี่ยงต่ำ",
-  temperature: "28.5 °C",
-  humidity: "82%",
-  soil: "65%",
-  trend: [38, 43, 41, 48, 46, 53, 57],
-};
-
-function formatDate(date: Date) {
-  return date.toLocaleDateString("th-TH", {
+function formatDate(date: Date, language: Language) {
+  return date.toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
-}
-
-function getReadingForDate(date: Date): Reading {
-  const day = date.getDate();
-  const offset = day % 5;
-  return {
-    ...defaultReading,
-    date: formatDate(date),
-    temperature: `${(28.1 + offset * 0.2).toFixed(1)} °C`,
-    humidity: `${80 + offset}%`,
-    soil: `${62 + offset}%`,
-    trend: [38 + offset, 43, 41 + offset, 48, 46 + offset, 53, 57 + offset],
-  };
 }
 
 function dateKey(value: string | undefined) {
@@ -74,22 +48,120 @@ function dateKeyFromDate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function numberValue(value: number | string | undefined, fallback: number) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+function localizedDateLabel(date: Date, language: Language) {
+  return date.toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  });
 }
 
-function readingFromRows(date: Date, rows: ApiRow[]) {
-  if (rows.length === 0) return getReadingForDate(date);
+function numberValue(value: number | string | undefined) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
 
-  const latest = rows[rows.length - 1];
+function soilPercentage(value: number | string | undefined) {
+  const parsed = numberValue(value);
+  if (parsed === undefined) return undefined;
+  return parsed > 100 && parsed <= 4095 ? (parsed / 4095) * 100 : parsed;
+}
+
+function rainValue(row: ApiRow) {
+  return numberValue(row.rain ?? row["WH-SP-RG"]);
+}
+
+function normalizeRows(payload: unknown): ApiRow[] {
+  if (Array.isArray(payload)) return payload as ApiRow[];
+
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    const maybeData = record.data;
+    if (Array.isArray(maybeData)) return maybeData as ApiRow[];
+
+    if (Array.isArray(record.rows)) return record.rows as ApiRow[];
+    if (Array.isArray(record.items)) return record.items as ApiRow[];
+  }
+
+  return [];
+}
+
+function readingFromRow(
+  row: ApiRow,
+  date: Date,
+  language: Language,
+  t: ReturnType<typeof useLanguage>["t"],
+) {
+  const temperature = numberValue(row.temperature);
+  const humidity = numberValue(row.humidity);
+  const soil = soilPercentage(row.soil);
+  const rain = rainValue(row);
+
   return {
-    date: formatDate(date),
-    risk: latest.risk_level ?? "ความเสี่ยงต่ำ",
-    temperature: `${numberValue(latest.temperature, 28.5).toFixed(1)} °C`,
-    humidity: `${numberValue(latest.humidity, 82)}%`,
-    soil: `${numberValue(latest.soil, 65)}%`,
-    trend: rows.map((row) => numberValue(row.risk_score, 0)),
+    date: row.created_at
+      ? new Date(row.created_at).toLocaleString(
+          language === "th" ? "th-TH" : "en-US",
+          {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          },
+        )
+      : formatDate(date, language),
+    risk: localizedRisk(row.risk_level, t),
+    temperature:
+      temperature === undefined ? "-" : `${temperature.toFixed(1)} °C`,
+    humidity: humidity === undefined ? "-" : `${humidity}%`,
+    soil: soil === undefined ? "-" : `${soil.toFixed(1)}%`,
+    rain: rain === undefined ? "-" : `${rain} mm`,
+  };
+}
+
+function localizedRisk(
+  value: string | undefined,
+  t: ReturnType<typeof useLanguage>["t"],
+) {
+  const level = String(value ?? "").toLowerCase();
+  if (level.includes("high") || level.includes("สูง")) return t("riskHigh");
+  if (level.includes("medium") || level.includes("กลาง"))
+    return t("riskMedium");
+  if (level.includes("low") || level.includes("ต่ำ")) return t("riskLow");
+  return value || t("unspecifiedRisk");
+}
+
+function readingFromRows(
+  date: Date,
+  rows: ApiRow[],
+  language: Language,
+  t: ReturnType<typeof useLanguage>["t"],
+) {
+  if (rows.length === 0) {
+    return {
+      date: formatDate(date, language),
+      risk: t("noData"),
+      temperature: "-",
+      humidity: "-",
+      soil: "-",
+      rain: "-",
+      trend: [],
+    };
+  }
+
+  const orderedRows = [...rows].sort((a, b) => {
+    const aTime = new Date(String(a.created_at ?? 0)).getTime();
+    const bTime = new Date(String(b.created_at ?? 0)).getTime();
+    return aTime - bTime;
+  });
+
+  const latest = orderedRows[orderedRows.length - 1];
+  const latestReading = readingFromRow(latest, date, language, t);
+  return {
+    ...latestReading,
+    trend: orderedRows
+      .map((row) => numberValue(row.risk_score))
+      .filter((value): value is number => value !== undefined),
   };
 }
 
@@ -98,6 +170,7 @@ function toDateInputValue(date: Date) {
 }
 
 export default function HistoryScreen() {
+  const { language, t } = useLanguage();
   const { width } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -107,11 +180,45 @@ export default function HistoryScreen() {
   const [webDate, setWebDate] = useState(() =>
     new Date().toISOString().slice(0, 10),
   );
-  const selectedRows = rows.filter(
-    (row) => dateKey(row.created_at) === dateKeyFromDate(selectedDate),
+  const selectedRows = [...rows]
+    .filter((row) => dateKey(row.created_at) === dateKeyFromDate(selectedDate))
+    .sort((a, b) => {
+      const aTime = new Date(String(a.created_at ?? 0)).getTime();
+      const bTime = new Date(String(b.created_at ?? 0)).getTime();
+      return aTime - bTime;
+    });
+  const selectedReading = readingFromRows(
+    selectedDate,
+    selectedRows,
+    language,
+    t,
   );
-  const selectedReading = readingFromRows(selectedDate, selectedRows);
-  const chartWidth = Math.max(260, Math.min(width - 76, 620));
+  const selectedTrend = [...selectedRows]
+    .sort((a, b) => {
+      const aTime = new Date(String(a.created_at ?? 0)).getTime();
+      const bTime = new Date(String(b.created_at ?? 0)).getTime();
+      return aTime - bTime;
+    })
+    .map((row) => {
+      const value = numberValue(row.risk_score);
+      if (value === undefined) return undefined;
+
+      const time = row.created_at ? new Date(row.created_at) : undefined;
+      return {
+        value,
+        label:
+          time && !Number.isNaN(time.getTime())
+            ? time.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "-",
+      };
+    })
+    .filter((point): point is { value: number; label: string } =>
+      Boolean(point),
+    );
+  const chartWidth = Math.max(260, width - 76);
 
   const handleDateChange = (_event: unknown, date: Date) => {
     setShowDatePicker(false);
@@ -126,22 +233,42 @@ export default function HistoryScreen() {
 
   useEffect(() => {
     let mounted = true;
-    fetch(API_URL)
-      .then(async (response) => {
-        if (!response.ok)
+
+    const loadData = async () => {
+      try {
+        const response = await fetch(API_URL, {
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
           throw new Error(`API responded with ${response.status}`);
-        const result: { data?: ApiRow[] } = await response.json();
-        if (mounted && Array.isArray(result.data)) setRows(result.data);
-      })
-      .catch(() => {
-        if (mounted) setApiError(true);
-      })
-      .finally(() => {
+        }
+
+        const result = await response.json();
+        const normalizedRows = normalizeRows(result);
+
+        if (mounted) {
+          setRows(normalizedRows);
+          setApiError(normalizedRows.length === 0);
+        }
+      } catch {
+        if (mounted) {
+          setApiError(true);
+        }
+      } finally {
         if (mounted) setIsLoading(false);
-      });
+      }
+    };
+
+    loadData();
+    const refreshId = setInterval(loadData, REFRESH_INTERVAL_MS);
 
     return () => {
       mounted = false;
+      clearInterval(refreshId);
     };
   }, []);
 
@@ -159,11 +286,11 @@ export default function HistoryScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.eyebrow}>ORCHARDGUARD</Text>
-        <Text style={styles.title}>ข้อมูลย้อนหลัง</Text>
-        <Text style={styles.subtitle}>ติดตามแนวโน้มสุขภาพสวนของคุณ</Text>
+        <Text style={styles.title}>{t("historyTitle")}</Text>
+        <Text style={styles.subtitle}>{t("historySubtitle")}</Text>
 
         <View style={styles.dateSection}>
-          <Text style={styles.dateSectionTitle}>เลือกวันที่ดูข้อมูล</Text>
+          <Text style={styles.dateSectionTitle}>{t("chooseDate")}</Text>
           <View style={styles.quickDateRow}>
             <Pressable
               onPress={() => selectQuickDate(0)}
@@ -172,9 +299,9 @@ export default function HistoryScreen() {
                 pressed && styles.pressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="ดูข้อมูลวันนี้"
+              accessibilityLabel={t("viewToday")}
             >
-              <Text style={styles.quickDateText}>วันนี้</Text>
+              <Text style={styles.quickDateText}>{t("today")}</Text>
             </Pressable>
             <Pressable
               onPress={() => selectQuickDate(1)}
@@ -183,9 +310,9 @@ export default function HistoryScreen() {
                 pressed && styles.pressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="ดูข้อมูลเมื่อวาน"
+              accessibilityLabel={t("viewYesterday")}
             >
-              <Text style={styles.quickDateText}>เมื่อวาน</Text>
+              <Text style={styles.quickDateText}>{t("yesterday")}</Text>
             </Pressable>
           </View>
           {Platform.OS === "web" ? (
@@ -194,7 +321,7 @@ export default function HistoryScreen() {
               onChangeText={handleWebDateChange}
               placeholder="YYYY-MM-DD"
               style={styles.webDateInput}
-              accessibilityLabel="เลือกวันที่"
+              accessibilityLabel={t("selectDate")}
             />
           ) : (
             <Pressable
@@ -204,10 +331,10 @@ export default function HistoryScreen() {
                 pressed && styles.pressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="เปิดปฏิทินเลือกวันที่"
+              accessibilityLabel={t("openCalendar")}
             >
               <Text style={styles.dateButtonText}>
-                เลือกวันที่: {selectedReading.date}
+                {t("chooseDateLabel", { date: selectedReading.date })}
               </Text>
             </Pressable>
           )}
@@ -223,69 +350,118 @@ export default function HistoryScreen() {
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>สถานะของวันที่เลือก</Text>
+          <Text style={styles.summaryLabel}>{t("selectedDateStatus")}</Text>
           <Text style={styles.summaryValue}>{selectedReading.risk}</Text>
           <Text style={styles.summaryHint}>
             {isLoading
-              ? "กำลังโหลดข้อมูลจากเซิร์ฟเวอร์"
+              ? t("loadingServer")
               : selectedRows.length > 0
-                ? `ข้อมูลจากเซนเซอร์ ${selectedRows.length} รายการ`
+                ? t("sensorRecords", { count: selectedRows.length })
                 : apiError
-                  ? "เชื่อมต่อไม่ได้ กำลังใช้ข้อมูลสำรอง"
-                  : "วันนี้ยังไม่มีข้อมูลสำหรับวันที่เลือก"}
+                  ? t("connectionFallback")
+                  : t("noDateData")}
           </Text>
         </View>
 
         <View style={styles.chartCard}>
           <View style={styles.chartHeader}>
             <View>
-              <Text style={styles.chartTitle}>แนวโน้มความเสี่ยง</Text>
-              <Text style={styles.chartSubtitle}>ข้อมูล 7 ช่วงเวลาล่าสุด</Text>
+              <Text style={styles.chartTitle}>{t("riskTrend")}</Text>
+              <Text style={styles.chartSubtitle}>
+                {t("dateFromApi", {
+                  date: localizedDateLabel(selectedDate, language),
+                  count: selectedTrend.length,
+                })}
+              </Text>
             </View>
             <View style={styles.legend}>
               <View style={styles.legendDot} />
-              <Text style={styles.legendText}>ระดับความเสี่ยง</Text>
+              <Text style={styles.legendText}>{t("riskLevel")}</Text>
             </View>
           </View>
-          <LineChart values={selectedReading.trend} width={chartWidth} />
+          <LineChart values={selectedTrend} width={chartWidth} />
         </View>
 
-        <Text style={styles.sectionTitle}>ค่าที่ตรวจวัด</Text>
-        <View style={styles.readingCard}>
-          <View style={styles.readingHeader}>
-            <Text style={styles.date}>{selectedReading.date}</Text>
-            <Text style={styles.risk}>{selectedReading.risk}</Text>
+        <Text style={styles.sectionTitle}>{t("measurements")}</Text>
+        {selectedRows.length > 0 ? (
+          selectedRows
+            .slice()
+            .reverse()
+            .map((row, index) => (
+              <ReadingCard
+                key={`${row.created_at ?? "reading"}-${index}`}
+                row={row}
+                date={selectedDate}
+                language={language}
+                t={t}
+              />
+            ))
+        ) : (
+          <View style={styles.readingCard}>
+            <View style={styles.readingHeader}>
+              <Text style={styles.date}>{selectedReading.date}</Text>
+              <Text style={styles.risk}>{selectedReading.risk}</Text>
+            </View>
+            <View style={styles.metrics}>
+              <Metric
+                label={t("temperature")}
+                value={selectedReading.temperature}
+              />
+              <Metric
+                label={t("airHumidity")}
+                value={selectedReading.humidity}
+              />
+              <Metric label={t("soilMoisture")} value={selectedReading.soil} />
+              <Metric label={t("rainfall")} value={selectedReading.rain} />
+            </View>
           </View>
-          <View style={styles.metrics}>
-            <Metric label="อุณหภูมิ" value={selectedReading.temperature} />
-            <Metric label="ความชื้นอากาศ" value={selectedReading.humidity} />
-            <Metric label="ความชื้นดิน" value={selectedReading.soil} />
-          </View>
-        </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function LineChart({ values, width }: { values: number[]; width: number }) {
+function LineChart({
+  values,
+  width,
+}: {
+  values: { value: number; label: string }[];
+  width: number;
+}) {
   const height = 190;
   const padding = { top: 14, right: 12, bottom: 30, left: 30 };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
-  const min = 20;
-  const max = 80;
-  const points = values.map((value, index) => ({
-    x: padding.left + (plotWidth / (values.length - 1)) * index,
-    y: padding.top + ((max - value) / (max - min)) * plotHeight,
-  }));
+
+  const safeValues = values
+    .map((point) => point.value)
+    .filter((value) => Number.isFinite(value));
+  const numericValues = safeValues.length > 0 ? safeValues : [0];
+  const min = 0;
+  const max = Math.max(10, Math.ceil(Math.max(...numericValues)));
+  const range = max - min || 1;
+
+  const points = numericValues.map((value, index) => {
+    const x =
+      numericValues.length === 1
+        ? padding.left + plotWidth / 2
+        : padding.left + (plotWidth / (numericValues.length - 1)) * index;
+    const y = padding.top + ((max - value) / range) * plotHeight;
+
+    return {
+      x: Number.isFinite(x) ? x : padding.left,
+      y: Number.isFinite(y) ? y : padding.top,
+    };
+  });
+
   const path = points
     .map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`)
     .join(" ");
 
   return (
     <Svg width={width} height={height}>
-      {[20, 40, 60, 80].map((value) => {
-        const y = padding.top + ((max - value) / (max - min)) * plotHeight;
+      {[0, 2, 4, 6, 8, 10].map((value) => {
+        const y = padding.top + ((max - value) / range) * plotHeight;
         return (
           <Line
             key={value}
@@ -298,8 +474,8 @@ function LineChart({ values, width }: { values: number[]; width: number }) {
           />
         );
       })}
-      {[20, 40, 60, 80].map((value) => {
-        const y = padding.top + ((max - value) / (max - min)) * plotHeight + 4;
+      {[0, 2, 4, 6, 8, 10].map((value) => {
+        const y = padding.top + ((max - value) / range) * plotHeight + 4;
         return (
           <SvgText key={value} x={2} y={y} fill="#91A097" fontSize={10}>
             {value}
@@ -333,7 +509,7 @@ function LineChart({ values, width }: { values: number[]; width: number }) {
           fontSize={9}
           textAnchor="middle"
         >
-          {`${index * 4}:00`}
+          {values[index]?.label ?? "-"}
         </SvgText>
       ))}
     </Svg>
@@ -345,6 +521,35 @@ function Metric({ label, value }: { label: string; value: string }) {
     <View style={styles.metric}>
       <Text style={styles.metricLabel}>{label}</Text>
       <Text style={styles.metricValue}>{value}</Text>
+    </View>
+  );
+}
+
+function ReadingCard({
+  row,
+  date,
+  language,
+  t,
+}: {
+  row: ApiRow;
+  date: Date;
+  language: Language;
+  t: ReturnType<typeof useLanguage>["t"];
+}) {
+  const reading = readingFromRow(row, date, language, t);
+
+  return (
+    <View style={styles.readingCard}>
+      <View style={styles.readingHeader}>
+        <Text style={styles.date}>{reading.date}</Text>
+        <Text style={styles.risk}>{reading.risk}</Text>
+      </View>
+      <View style={styles.metrics}>
+        <Metric label={t("temperature")} value={reading.temperature} />
+        <Metric label={t("airHumidity")} value={reading.humidity} />
+        <Metric label={t("soilMoisture")} value={reading.soil} />
+        <Metric label={t("rainfall")} value={reading.rain} />
+      </View>
     </View>
   );
 }

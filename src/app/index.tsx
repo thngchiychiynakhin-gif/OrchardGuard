@@ -1,12 +1,14 @@
+import { API_BASE_URL } from "@/constants/api";
+import { useLanguage } from "@/hooks/language";
 import { Link } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  Dimensions,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    Dimensions,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
@@ -18,7 +20,8 @@ const CENTER = DONUT_SIZE / 2;
 const RADIUS = DONUT_SIZE * 0.36;
 const STROKE_WIDTH = DONUT_SIZE * 0.18;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-const API_URL = "http://localhost/orchardguard/get_data.php";
+const API_URL = `${API_BASE_URL}/get_data.php`;
+const REFRESH_INTERVAL_MS = 5000;
 
 type OrchardRow = {
   temperature?: number | string;
@@ -31,18 +34,22 @@ type OrchardRow = {
 };
 
 const fallbackRow: OrchardRow = {
-  temperature: 28.5,
-  humidity: 82,
-  soil: 65,
+  temperature: 0,
+  humidity: 0,
+  soil: 0,
   rain: 0,
   risk_score: 1,
   risk_level: "LOW",
-  created_at: "ข้อมูลตัวอย่าง",
 };
 
 function numberValue(value: number | string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function soilPercentage(value: number | string | undefined, fallback: number) {
+  const parsed = numberValue(value, fallback);
+  return parsed > 100 && parsed <= 4095 ? (parsed / 4095) * 100 : parsed;
 }
 
 function riskBucket(row: OrchardRow) {
@@ -79,40 +86,63 @@ function todayKey() {
 }
 
 export default function HomeScreen() {
-  const [rows, setRows] = useState<OrchardRow[]>([fallbackRow]);
+  const { t } = useLanguage();
+  const [rows, setRows] = useState<OrchardRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    async function loadData() {
+    const loadData = async () => {
       try {
-        const response = await fetch(API_URL);
-        if (!response.ok)
+        const response = await fetch(API_URL, {
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
           throw new Error(`API responded with ${response.status}`);
-        const result: { data?: OrchardRow[] } = await response.json();
-        if (isMounted && Array.isArray(result.data) && result.data.length > 0) {
-          setRows(result.data);
-          setApiError(false);
+        }
+
+        const result = await response.json();
+
+        const nextRows = Array.isArray(result)
+          ? result
+          : Array.isArray((result as { data?: OrchardRow[] })?.data)
+            ? (result as { data: OrchardRow[] }).data
+            : Array.isArray((result as { rows?: OrchardRow[] })?.rows)
+              ? (result as { rows: OrchardRow[] }).rows
+              : [];
+
+        if (isMounted) {
+          setRows(nextRows);
+          setApiError(nextRows.length === 0);
         }
       } catch {
-        if (isMounted) setApiError(true);
+        if (isMounted) {
+          setApiError(true);
+        }
       } finally {
         if (isMounted) setIsLoading(false);
       }
-    }
+    };
 
     loadData();
+    const refreshId = setInterval(loadData, REFRESH_INTERVAL_MS);
+
     return () => {
       isMounted = false;
+      clearInterval(refreshId);
     };
   }, []);
 
   const todayRows = rows.filter(
     (row) => dateKey(row.created_at) === todayKey(),
   );
-  const displayRows = todayRows.length > 0 ? todayRows : [fallbackRow];
+  const displayRows =
+    todayRows.length > 0 ? todayRows : rows.length > 0 ? rows : [];
   const latest = displayRows[displayRows.length - 1] ?? fallbackRow;
   const riskCounts = displayRows.reduce<Record<string, number>>(
     (counts, row) => {
@@ -122,36 +152,52 @@ export default function HomeScreen() {
     },
     {},
   );
-  const riskData = [
-    {
-      name: "ต่ำ",
-      value: Math.round(((riskCounts["ต่ำ"] ?? 0) / displayRows.length) * 100),
-      color: "#43A95C",
-    },
-    {
-      name: "ปานกลาง",
-      value: Math.round(
-        ((riskCounts["ปานกลาง"] ?? 0) / displayRows.length) * 100,
-      ),
-      color: "#FFB52E",
-    },
-    {
-      name: "สูง",
-      value: Math.round(((riskCounts["สูง"] ?? 0) / displayRows.length) * 100),
-      color: "#F45151",
-    },
-  ];
+  const riskData = displayRows.length
+    ? [
+        {
+          name: "ต่ำ",
+          value: Math.round(
+            ((riskCounts["ต่ำ"] ?? 0) / displayRows.length) * 100,
+          ),
+          color: "#43A95C",
+        },
+        {
+          name: "ปานกลาง",
+          value: Math.round(
+            ((riskCounts["ปานกลาง"] ?? 0) / displayRows.length) * 100,
+          ),
+          color: "#FFB52E",
+        },
+        {
+          name: "สูง",
+          value: Math.round(
+            ((riskCounts["สูง"] ?? 0) / displayRows.length) * 100,
+          ),
+          color: "#F45151",
+        },
+      ]
+    : [
+        { name: "ต่ำ", value: 0, color: "#43A95C" },
+        { name: "ปานกลาง", value: 0, color: "#FFB52E" },
+        { name: "สูง", value: 0, color: "#F45151" },
+      ];
   const latestRisk = riskBucket(latest);
-  const latestTemperature = numberValue(latest.temperature, 28.5);
-  const latestHumidity = numberValue(latest.humidity, 82);
-  const latestSoil = numberValue(latest.soil, 65);
+  const localizedRisk =
+    latestRisk === "สูง"
+      ? t("riskHigh")
+      : latestRisk === "ปานกลาง"
+        ? t("riskMedium")
+        : t("riskLow");
+  const latestTemperature = numberValue(latest.temperature, 0);
+  const latestHumidity = numberValue(latest.humidity, 0);
+  const latestSoil = soilPercentage(latest.soil, 0);
   const latestRain = numberValue(latest.rain, 0);
   const riskBadge =
     latestRisk === "สูง"
-      ? "HIGH RISK"
+      ? t("highRiskBadge")
       : latestRisk === "ปานกลาง"
-        ? "MEDIUM RISK"
-        : "LOW RISK";
+        ? t("mediumRiskBadge")
+        : t("lowRiskBadge");
 
   return (
     <SafeAreaView style={styles.container}>
@@ -176,14 +222,12 @@ export default function HomeScreen() {
             >
               OrchardGuard
             </Text>
-            <Text style={styles.subtitle}>
-              ระบบประเมินความเสี่ยงโรคในต้นทุเรียน
-            </Text>
+            <Text style={styles.subtitle}>{t("appDescription")}</Text>
           </View>
 
           <View style={styles.onlineBox}>
             <View style={styles.onlineDot} />
-            <Text style={styles.onlineText}>ออนไลน์</Text>
+            <Text style={styles.onlineText}>{t("online")}</Text>
           </View>
         </View>
 
@@ -198,10 +242,8 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.riskMain}>
-            <Text style={styles.riskSmallTitle}>
-              สถานะความเสี่ยงโรคปัจจุบัน
-            </Text>
-            <Text style={styles.riskLevel}>{latestRisk}</Text>
+            <Text style={styles.riskSmallTitle}>{t("riskStatus")}</Text>
+            <Text style={styles.riskLevel}>{localizedRisk}</Text>
             <View style={styles.lowBadge}>
               <Text style={styles.lowBadgeText}>{riskBadge}</Text>
             </View>
@@ -215,18 +257,20 @@ export default function HomeScreen() {
           >
             <Text style={styles.riskDescriptionTitle}>
               {isLoading
-                ? "กำลังโหลดข้อมูล"
-                : `ข้อมูลล่าสุด ${displayValue(latest.created_at, "จากเซนเซอร์")}`}
+                ? t("loadingData")
+                : t("latestData", {
+                    value: displayValue(latest.created_at, t("sampleData")),
+                  })}
             </Text>
             <Text style={styles.riskDescriptionText}>
-              ความเสี่ยงอยู่ในระดับ{latestRisk}
+              {t("riskAtLevel", { risk: localizedRisk })}
             </Text>
             <Text style={styles.riskDescriptionText}>
               {apiError
-                ? "กำลังใช้ข้อมูลสำรอง"
+                ? t("usingFallback")
                 : todayRows.length > 0
-                  ? `ข้อมูลของวันนี้ ${todayRows.length} รายการ`
-                  : "วันนี้ยังไม่มีข้อมูล ใช้ข้อมูลตัวอย่าง"}
+                  ? t("todaysRecords", { count: todayRows.length })
+                  : t("noDataSample")}
             </Text>
           </View>
         </View>
@@ -242,13 +286,13 @@ export default function HomeScreen() {
                 <Text>◔</Text>
               </View>
 
-              <Text style={styles.chartTitle}>สัดส่วนระดับความเสี่ยง</Text>
+              <Text style={styles.chartTitle}>{t("riskDistribution")}</Text>
             </View>
 
             <View style={styles.todayButton}>
               <Text style={styles.todayIcon}>▣</Text>
 
-              <Text style={styles.todayText}>วันนี้</Text>
+              <Text style={styles.todayText}>{t("today")}</Text>
             </View>
           </View>
 
@@ -333,7 +377,7 @@ export default function HomeScreen() {
               {/* ข้อความตรงกลาง */}
 
               <View style={styles.donutCenter}>
-                <Text style={styles.donutCenterSmall}>รวมทั้งหมด</Text>
+                <Text style={styles.donutCenterSmall}>{t("total")}</Text>
 
                 <Text
                   style={styles.donutCenterValue}
@@ -341,9 +385,9 @@ export default function HomeScreen() {
                   adjustsFontSizeToFit
                   minimumFontScale={0.65}
                 >
-                  {displayRows.length} รายการ
+                  {displayRows.length} {t("records")}
                 </Text>
-                <Text style={styles.donutCenterDate}>วันนี้</Text>
+                <Text style={styles.donutCenterDate}>{t("today")}</Text>
               </View>
             </View>
 
@@ -366,7 +410,13 @@ export default function HomeScreen() {
                     ]}
                   />
 
-                  <Text style={styles.legendName}>{item.name}</Text>
+                  <Text style={styles.legendName}>
+                    {item.name === "สูง"
+                      ? t("riskHigh")
+                      : item.name === "ปานกลาง"
+                        ? t("riskMedium")
+                        : t("riskLow")}
+                  </Text>
 
                   <Text style={styles.legendValue}>{item.value}%</Text>
 
@@ -377,11 +427,7 @@ export default function HomeScreen() {
               <View style={styles.chartNote}>
                 <Text style={styles.chartNoteIcon}>↗</Text>
 
-                <Text style={styles.chartNoteText}>
-                  สัดส่วนนี้อ้างอิงจากการวิเคราะห์
-                  {"\n"}
-                  ข้อมูลสภาพแวดล้อมและอัลกอริทึม ML
-                </Text>
+                <Text style={styles.chartNoteText}>{t("analysisNote")}</Text>
               </View>
             </View>
           </View>
@@ -399,13 +445,13 @@ export default function HomeScreen() {
               <Text style={styles.sensorIconText}>🌡</Text>
             </View>
 
-            <Text style={styles.sensorLabel}>อุณหภูมิ</Text>
+            <Text style={styles.sensorLabel}>{t("temperature")}</Text>
 
             <Text style={styles.sensorValue}>
               {latestTemperature.toFixed(1)} °C
             </Text>
 
-            <Text style={styles.normalText}>↑ ปกติ</Text>
+            <Text style={styles.normalText}>↑ {t("normal")}</Text>
           </View>
 
           {/* Humidity */}
@@ -415,11 +461,11 @@ export default function HomeScreen() {
               <Text style={styles.sensorIconText}>💧</Text>
             </View>
 
-            <Text style={styles.sensorLabel}>ความชื้นอากาศ</Text>
+            <Text style={styles.sensorLabel}>{t("airHumidity")}</Text>
 
             <Text style={styles.sensorValue}>{latestHumidity} %</Text>
 
-            <Text style={styles.normalText}>↑ ปกติ</Text>
+            <Text style={styles.normalText}>↑ {t("normal")}</Text>
           </View>
         </View>
 
@@ -433,12 +479,12 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.longCardInfo}>
-            <Text style={styles.longCardLabel}>ความชื้นในดิน</Text>
+            <Text style={styles.longCardLabel}>{t("soilMoisture")}</Text>
 
             <View style={styles.valueRow}>
               <Text style={styles.longCardValue}>{latestSoil} %</Text>
 
-              <Text style={styles.normalText}>↑ ปกติ</Text>
+              <Text style={styles.normalText}>↑ {t("normal")}</Text>
             </View>
           </View>
 
@@ -466,17 +512,17 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.longCardInfo}>
-            <Text style={styles.rainLabel}>สถานะฝน</Text>
+            <Text style={styles.rainLabel}>{t("rainStatus")}</Text>
 
             <Text style={styles.rainValue}>
-              {latestRain > 0 ? "มีฝน" : "ไม่มีฝน"}
+              {latestRain > 0 ? t("raining") : t("noRain")}
             </Text>
           </View>
 
           <View style={styles.rainRight}>
             <Text style={styles.rainAmount}>{latestRain} mm</Text>
 
-            <Text style={styles.rainSub}>(24 ชั่วโมงที่ผ่านมา)</Text>
+            <Text style={styles.rainSub}>{t("last24Hours")}</Text>
           </View>
         </View>
 
@@ -496,11 +542,11 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.notificationInfo}>
-              <Text style={styles.notificationTitle}>การแจ้งเตือน</Text>
-
-              <Text style={styles.notificationText}>
-                ขณะนี้ยังไม่พบความเสี่ยงในระดับสูง
+              <Text style={styles.notificationTitle}>
+                {t("notificationTitle")}
               </Text>
+
+              <Text style={styles.notificationText}>{t("noHighRisk")}</Text>
             </View>
 
             <Text style={styles.notificationArrow}>›</Text>

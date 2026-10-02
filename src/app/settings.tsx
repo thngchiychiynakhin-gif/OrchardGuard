@@ -1,9 +1,18 @@
+import { useLanguage } from "@/hooks/language";
 import { useState } from "react";
-import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import {
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SettingsScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const { language, setLanguage, t } = useLanguage();
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -11,19 +20,55 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.eyebrow}>ORCHARDGUARD</Text>
-        <Text style={styles.title}>ตั้งค่า</Text>
-        <Text style={styles.subtitle}>ปรับการทำงานของระบบให้เหมาะกับคุณ</Text>
-        <Text style={styles.sectionTitle}>ทั่วไป</Text>
+        <Text style={styles.title}>{t("settings")}</Text>
+        <Text style={styles.subtitle}>{t("settingsSubtitle")}</Text>
+        <Text style={styles.sectionTitle}>{t("general")}</Text>
         <View style={styles.card}>
+          <View style={styles.languageSection}>
+            <View style={styles.rowIcon}>
+              <Text>文</Text>
+            </View>
+            <View style={styles.rowBody}>
+              <Text style={styles.rowTitle}>{t("language")}</Text>
+              <Text style={styles.rowHint}>{t("chooseLanguage")}</Text>
+            </View>
+          </View>
+          <View style={styles.languageOptions}>
+            {(
+              [
+                ["th", t("thai")],
+                ["en", t("english")],
+              ] as const
+            ).map(([value, label]) => (
+              <Pressable
+                key={value}
+                onPress={() => setLanguage(value)}
+                style={[
+                  styles.languageOption,
+                  language === value && styles.languageOptionSelected,
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: language === value }}
+              >
+                <Text
+                  style={[
+                    styles.languageOptionText,
+                    language === value && styles.languageOptionTextSelected,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.divider} />
           <View style={styles.row}>
             <View style={styles.rowIcon}>
               <Text>🔔</Text>
             </View>
             <View style={styles.rowBody}>
-              <Text style={styles.rowTitle}>การแจ้งเตือน</Text>
-              <Text style={styles.rowHint}>
-                รับการแจ้งเตือนเมื่อความเสี่ยงเปลี่ยนแปลง
-              </Text>
+              <Text style={styles.rowTitle}>{t("alertsSetting")}</Text>
+              <Text style={styles.rowHint}>{t("alertHint")}</Text>
             </View>
             <Switch
               value={notificationsEnabled}
@@ -38,8 +83,8 @@ export default function SettingsScreen() {
               <Text>🌡</Text>
             </View>
             <View style={styles.rowBody}>
-              <Text style={styles.rowTitle}>หน่วยอุณหภูมิ</Text>
-              <Text style={styles.rowHint}>เซลเซียส (°C)</Text>
+              <Text style={styles.rowTitle}>{t("temperatureUnit")}</Text>
+              <Text style={styles.rowHint}>{t("celsius")}</Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </View>
@@ -49,19 +94,17 @@ export default function SettingsScreen() {
               <Text>🏡</Text>
             </View>
             <View style={styles.rowBody}>
-              <Text style={styles.rowTitle}>ข้อมูลสวน</Text>
-              <Text style={styles.rowHint}>สวนทุเรียนของฉัน</Text>
+              <Text style={styles.rowTitle}>{t("orchardInfo")}</Text>
+              <Text style={styles.rowHint}>{t("myOrchard")}</Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </View>
         </View>
-        <Text style={styles.sectionTitle}>เกี่ยวกับระบบ</Text>
+        <Text style={styles.sectionTitle}>{t("about")}</Text>
         <View style={styles.aboutCard}>
           <Text style={styles.aboutTitle}>OrchardGuard</Text>
-          <Text style={styles.aboutText}>
-            ระบบประเมินความเสี่ยงโรคในต้นทุเรียน
-          </Text>
-          <Text style={styles.version}>เวอร์ชัน 1.0.0</Text>
+          <Text style={styles.aboutText}>{t("systemDescription")}</Text>
+          <Text style={styles.version}>{t("version")}</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -93,6 +136,32 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 16 },
+  languageSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 16,
+  },
+  languageOptions: {
+    flexDirection: "row",
+    gap: 8,
+    marginLeft: 52,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  languageOption: {
+    flex: 1,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DCE7DE",
+    borderRadius: 8,
+    paddingVertical: 10,
+  },
+  languageOptionSelected: {
+    backgroundColor: "#267545",
+    borderColor: "#267545",
+  },
+  languageOptionText: { color: "#53675A", fontSize: 13, fontWeight: "700" },
+  languageOptionTextSelected: { color: "#FFFFFF" },
   rowIcon: {
     width: 40,
     height: 40,

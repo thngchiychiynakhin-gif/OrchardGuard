@@ -1,15 +1,21 @@
+import { useLanguage } from "@/hooks/language";
 import { Link, usePathname } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 const items = [
-  { href: "/" as const, icon: "⌂", label: "หน้าหลัก" },
-  { href: "/history" as const, icon: "↗", label: "ย้อนหลัง" },
-  { href: "/notifications" as const, icon: "♧", label: "แจ้งเตือน" },
-  { href: "/settings" as const, icon: "⚙", label: "ตั้งค่า" },
+  { href: "/" as const, icon: "⌂", labelKey: "home" as const },
+  { href: "/history" as const, icon: "↗", labelKey: "history" as const },
+  {
+    href: "/notifications" as const,
+    icon: "♧",
+    labelKey: "notifications" as const,
+  },
+  { href: "/settings" as const, icon: "⚙", labelKey: "settings" as const },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   return (
     <View style={styles.container}>
@@ -21,13 +27,13 @@ export function BottomNav() {
             <Pressable
               style={({ pressed }) => [styles.item, pressed && styles.pressed]}
               accessibilityRole="button"
-              accessibilityLabel={item.label}
+              accessibilityLabel={t(item.labelKey)}
             >
               <Text style={[styles.icon, isActive && styles.activeIcon]}>
                 {item.icon}
               </Text>
               <Text style={[styles.label, isActive && styles.activeLabel]}>
-                {item.label}
+                {t(item.labelKey)}
               </Text>
             </Pressable>
           </Link>
@@ -46,10 +52,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingVertical: 10,
     elevation: 5,
-    shadowColor: "#245E3A",
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    boxShadow: "0px 4px 12px rgba(36, 94, 58, 0.1)",
   },
   item: {
     alignItems: "center",

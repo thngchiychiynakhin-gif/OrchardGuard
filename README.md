@@ -16,6 +16,8 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+For a physical phone during development, keep the phone and computer on the same network. The app uses the Expo development host to reach the API at `/orchardguard` automatically. For a production build, set `EXPO_PUBLIC_API_BASE_URL` to the API server's phone-accessible base URL, for example `https://example.com/orchardguard`.
+
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)
