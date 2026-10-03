@@ -4,6 +4,7 @@ import { Link } from "expo-router";
 import { useEffect, useState } from "react";
 import {
     Dimensions,
+    Image,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -213,7 +214,12 @@ export default function HomeScreen() {
           style={[styles.header, SCREEN_WIDTH < 380 && styles.headerMobile]}
         >
           <View style={styles.logoBox}>
-            <Text style={styles.logoIcon}>🌿</Text>
+            <Image
+              source={require("../../assets/images/icon.png")}
+              style={styles.logoImage}
+              resizeMode="cover"
+              accessible={false}
+            />
           </View>
 
           <View style={styles.headerText}>
@@ -238,7 +244,12 @@ export default function HomeScreen() {
           ]}
         >
           <View style={styles.riskIconBox}>
-            <Text style={styles.riskIcon}>🌿</Text>
+            <Image
+              source={require("../../assets/images/icon.png")}
+              style={styles.riskImage}
+              resizeMode="cover"
+              accessible={false}
+            />
           </View>
 
           <View style={styles.riskMain}>
@@ -602,8 +613,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
 
-  logoIcon: {
-    fontSize: 29,
+  logoImage: {
+    width: 55,
+    height: 55,
+    borderRadius: 18,
   },
 
   headerText: {
@@ -677,8 +690,10 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
 
-  riskIcon: {
-    fontSize: 30,
+  riskImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
   },
 
   riskMain: {

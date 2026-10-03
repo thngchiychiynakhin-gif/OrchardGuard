@@ -97,24 +97,6 @@ const translations = {
     sensorReadings: "Sensor readings",
     noSensorConnection: "No sensor data yet. Please check the connection",
     noSensorData: "No sensor data yet",
-    explore: "Explore",
-    exploreDescription:
-      "This starter app includes example code to help you get started.",
-    expoDocumentation: "Expo documentation",
-    fileRouting: "File-based routing",
-    routingText: "This app has screens at {{home}} and {{explore}}.",
-    layoutText: "The {{layout}} file sets up the tab navigation.",
-    learnMore: "Learn more",
-    platformSupport: "Android, iOS, and web support",
-    platformText: "This project supports Android, iOS, and web.",
-    images: "Images",
-    imagesText:
-      "Use @2x and @3x suffixes for images at different screen densities.",
-    colorModes: "Light and dark mode",
-    colorModesText:
-      "Use the color scheme hook to adapt components to the system theme.",
-    animations: "Animations",
-    animationsText: "This template includes an animated collapsible component.",
   },
   th: {
     home: "หน้าหลัก",
@@ -206,22 +188,6 @@ const translations = {
     sensorReadings: "ค่าจากเซนเซอร์",
     noSensorConnection: "ยังไม่มีข้อมูลจากเซนเซอร์ โปรดตรวจสอบการเชื่อมต่อ",
     noSensorData: "ยังไม่มีข้อมูลจากเซนเซอร์",
-    explore: "สำรวจ",
-    exploreDescription: "แอปตัวอย่างนี้มีโค้ดประกอบเพื่อช่วยเริ่มต้นใช้งาน",
-    expoDocumentation: "เอกสาร Expo",
-    fileRouting: "การกำหนดเส้นทางแบบไฟล์",
-    routingText: "แอปนี้มีหน้าจอที่ {{home}} และ {{explore}}",
-    layoutText: "ไฟล์ {{layout}} ใช้ตั้งค่าการนำทางแท็บ",
-    learnMore: "เรียนรู้เพิ่มเติม",
-    platformSupport: "รองรับ Android, iOS และเว็บ",
-    platformText: "โปรเจกต์นี้รองรับ Android, iOS และเว็บ",
-    images: "รูปภาพ",
-    imagesText:
-      "ใช้คำลงท้าย @2x และ @3x สำหรับรูปภาพที่มีความหนาแน่นพิกเซลต่างกัน",
-    colorModes: "โหมดสว่างและมืด",
-    colorModesText: "ใช้ color scheme hook เพื่อปรับหน้าตาตามธีมของระบบ",
-    animations: "ภาพเคลื่อนไหว",
-    animationsText: "เทมเพลตนี้มีคอมโพเนนต์ยุบและขยายพร้อมภาพเคลื่อนไหว",
   },
 } as const;
 

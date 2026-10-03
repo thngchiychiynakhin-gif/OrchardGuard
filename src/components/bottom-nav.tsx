@@ -1,16 +1,28 @@
 import { useLanguage } from "@/hooks/language";
 import { Link, usePathname } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 const items = [
-  { href: "/" as const, icon: "⌂", labelKey: "home" as const },
-  { href: "/history" as const, icon: "↗", labelKey: "history" as const },
+  {
+    href: "/" as const,
+    icon: require("../../assets/images/nav/home.png"),
+    labelKey: "home" as const,
+  },
+  {
+    href: "/history" as const,
+    icon: require("../../assets/images/nav/calendar.png"),
+    labelKey: "history" as const,
+  },
   {
     href: "/notifications" as const,
-    icon: "♧",
+    icon: require("../../assets/images/nav/bell.png"),
     labelKey: "notifications" as const,
   },
-  { href: "/settings" as const, icon: "⚙", labelKey: "settings" as const },
+  {
+    href: "/settings" as const,
+    icon: require("../../assets/images/nav/settings.png"),
+    labelKey: "settings" as const,
+  },
 ];
 
 export function BottomNav() {
@@ -29,9 +41,15 @@ export function BottomNav() {
               accessibilityRole="button"
               accessibilityLabel={t(item.labelKey)}
             >
-              <Text style={[styles.icon, isActive && styles.activeIcon]}>
-                {item.icon}
-              </Text>
+              <Image
+                source={item.icon}
+                style={[
+                  styles.icon,
+                  { tintColor: isActive ? "#187345" : "#819087" },
+                ]}
+                resizeMode="contain"
+                accessible={false}
+              />
               <Text style={[styles.label, isActive && styles.activeLabel]}>
                 {t(item.labelKey)}
               </Text>
@@ -60,9 +78,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: "center",
   },
-  icon: { color: "#819087", fontSize: 21, lineHeight: 23 },
+  icon: { width: 23, height: 23 },
   label: { color: "#819087", fontSize: 10, marginTop: 3 },
-  activeIcon: { color: "#187345" },
   activeLabel: { color: "#187345", fontWeight: "800" },
   pressed: { opacity: 0.65 },
 });
