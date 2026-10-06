@@ -1,7 +1,7 @@
 import { API_BASE_URL } from "@/constants/api";
 import { useLanguage, type Language } from "@/hooks/language";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     Platform,
     Pressable,
@@ -379,7 +379,11 @@ export default function HistoryScreen() {
               <Text style={styles.legendText}>{t("riskLevel")}</Text>
             </View>
           </View>
-          <LineChart values={selectedTrend} width={chartWidth} />
+          <LineChart
+            values={selectedTrend}
+            width={chartWidth}
+            scrollHint={t("chartSwipeHint")}
+          />
         </View>
 
         <Text style={styles.sectionTitle}>{t("measurements")}</Text>
@@ -424,95 +428,151 @@ export default function HistoryScreen() {
 function LineChart({
   values,
   width,
+  scrollHint,
 }: {
   values: { value: number; label: string }[];
   width: number;
+  scrollHint: string;
 }) {
-  const height = 190;
-  const padding = { top: 14, right: 12, bottom: 30, left: 30 };
-  const plotWidth = width - padding.left - padding.right;
+  const height = 230;
+  const axisWidth = 36;
+  const padding = { top: 16, right: 16, bottom: 36, left: 16 };
+  const scrollViewportWidth = Math.max(0, width - axisWidth);
+  const chartRef = useRef<ScrollView>(null);
+
+  const validValues = values.filter((point) => Number.isFinite(point.value));
+  const chartValues =
+    validValues.length > 0 ? validValues : [{ value: 0, label: "-" }];
+  const chartContentWidth = Math.max(
+    scrollViewportWidth,
+    padding.left + padding.right + (chartValues.length - 1) * 48,
+  );
+  const plotWidth = chartContentWidth - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
+  const highestValue = Math.max(0, ...chartValues.map((point) => point.value));
+  const rawTickStep = highestValue / 5;
+  const tickPower =
+    rawTickStep > 0 ? 10 ** Math.floor(Math.log10(rawTickStep)) : 1;
+  const normalizedTickStep = rawTickStep / tickPower;
+  const tickStep = Math.max(
+    2,
+    normalizedTickStep <= 1
+      ? tickPower
+      : normalizedTickStep <= 2
+        ? 2 * tickPower
+        : normalizedTickStep <= 5
+          ? 5 * tickPower
+          : 10 * tickPower,
+  );
+  const max = Math.max(10, Math.ceil(highestValue / tickStep) * tickStep);
+  const yTicks = Array.from(
+    { length: Math.floor(max / tickStep) + 1 },
+    (_, index) => index * tickStep,
+  );
+  const range = max || 1;
 
-  const safeValues = values
-    .map((point) => point.value)
-    .filter((value) => Number.isFinite(value));
-  const numericValues = safeValues.length > 0 ? safeValues : [0];
-  const min = 0;
-  const max = Math.max(10, Math.ceil(Math.max(...numericValues)));
-  const range = max - min || 1;
-
-  const points = numericValues.map((value, index) => {
+  const points = chartValues.map((point, index) => {
     const x =
-      numericValues.length === 1
+      chartValues.length === 1
         ? padding.left + plotWidth / 2
-        : padding.left + (plotWidth / (numericValues.length - 1)) * index;
-    const y = padding.top + ((max - value) / range) * plotHeight;
+        : padding.left + (plotWidth / (chartValues.length - 1)) * index;
+    const y = padding.top + ((max - point.value) / range) * plotHeight;
 
     return {
       x: Number.isFinite(x) ? x : padding.left,
       y: Number.isFinite(y) ? y : padding.top,
     };
   });
-
   const path = points
     .map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`)
     .join(" ");
 
   return (
-    <Svg width={width} height={height}>
-      {[0, 2, 4, 6, 8, 10].map((value) => {
-        const y = padding.top + ((max - value) / range) * plotHeight;
-        return (
-          <Line
-            key={value}
-            x1={padding.left}
-            x2={width - padding.right}
-            y1={y}
-            y2={y}
-            stroke="#E8F0EA"
-            strokeWidth={1}
-          />
-        );
-      })}
-      {[0, 2, 4, 6, 8, 10].map((value) => {
-        const y = padding.top + ((max - value) / range) * plotHeight + 4;
-        return (
-          <SvgText key={value} x={2} y={y} fill="#91A097" fontSize={10}>
-            {value}
-          </SvgText>
-        );
-      })}
-      <Path
-        d={path}
-        fill="none"
-        stroke="#328B4E"
-        strokeWidth={3}
-        strokeLinecap="round"
-      />
-      {points.map((point, index) => (
-        <Circle
-          key={index}
-          cx={point.x}
-          cy={point.y}
-          r={5}
-          fill="#FFFFFF"
-          stroke="#328B4E"
-          strokeWidth={3}
-        />
-      ))}
-      {points.map((point, index) => (
-        <SvgText
-          key={`label-${index}`}
-          x={point.x}
-          y={height - 8}
-          fill="#91A097"
-          fontSize={9}
-          textAnchor="middle"
+    <View>
+      {chartContentWidth > scrollViewportWidth && (
+        <Text style={styles.chartScrollHint}>{scrollHint}</Text>
+      )}
+      <View style={{ flexDirection: "row", width }}>
+        <Svg width={axisWidth} height={height}>
+          {yTicks.map((value) => {
+            const y = padding.top + ((max - value) / range) * plotHeight + 4;
+            return (
+              <SvgText
+                key={value}
+                x={axisWidth - 5}
+                y={y}
+                fill="#718176"
+                fontSize={10}
+                fontWeight="600"
+                textAnchor="end"
+              >
+                {value}
+              </SvgText>
+            );
+          })}
+        </Svg>
+        <ScrollView
+          ref={chartRef}
+          horizontal
+          showsHorizontalScrollIndicator
+          nestedScrollEnabled
+          style={{ width: scrollViewportWidth }}
+          onContentSizeChange={() => {
+            if (chartContentWidth > scrollViewportWidth) {
+              chartRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
         >
-          {values[index]?.label ?? "-"}
-        </SvgText>
-      ))}
-    </Svg>
+          <Svg width={chartContentWidth} height={height}>
+            {yTicks.map((value) => {
+              const y = padding.top + ((max - value) / range) * plotHeight;
+              return (
+                <Line
+                  key={value}
+                  x1={padding.left}
+                  x2={chartContentWidth - padding.right}
+                  y1={y}
+                  y2={y}
+                  stroke="#DFE9E1"
+                  strokeWidth={1.2}
+                />
+              );
+            })}
+            <Path
+              d={path}
+              fill="none"
+              stroke="#328B4E"
+              strokeWidth={3.5}
+              strokeLinecap="round"
+            />
+            {points.map((point, index) => (
+              <Circle
+                key={index}
+                cx={point.x}
+                cy={point.y}
+                r={index === points.length - 1 ? 5 : 3.5}
+                fill="#FFFFFF"
+                stroke="#328B4E"
+                strokeWidth={2.5}
+              />
+            ))}
+            {points.map((point, index) => (
+              <SvgText
+                key={`label-${index}`}
+                x={point.x}
+                y={height - 8}
+                fill="#718176"
+                fontSize={10}
+                fontWeight="500"
+                textAnchor="middle"
+              >
+                {chartValues[index].label}
+              </SvgText>
+            ))}
+          </Svg>
+        </ScrollView>
+      </View>
+    </View>
   );
 }
 
@@ -643,6 +703,12 @@ const styles = StyleSheet.create({
   },
   chartTitle: { color: "#263A2D", fontSize: 17, fontWeight: "800" },
   chartSubtitle: { color: "#89988E", fontSize: 11, marginTop: 4 },
+  chartScrollHint: {
+    color: "#718176",
+    fontSize: 11,
+    marginBottom: 4,
+    textAlign: "right",
+  },
   legend: { flexDirection: "row", alignItems: "center" },
   legendDot: {
     width: 9,

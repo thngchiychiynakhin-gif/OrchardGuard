@@ -493,7 +493,7 @@ export default function HomeScreen() {
             <Text style={styles.longCardLabel}>{t("soilMoisture")}</Text>
 
             <View style={styles.valueRow}>
-              <Text style={styles.longCardValue}>{latestSoil} %</Text>
+              <Text style={styles.longCardValue}>{latestSoil.toFixed(1)} %</Text>
 
               <Text style={styles.normalText}>↑ {t("normal")}</Text>
             </View>
